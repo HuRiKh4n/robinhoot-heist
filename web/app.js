@@ -128,7 +128,7 @@ function note(text, error = false) { const n = $('note'); n.textContent = text; 
 let connector;
 async function getConnector() {
   if (connector) return connector;
-  const { NearConnector } = await import('./vendor/near-connect.js');
+  const { NearConnector } = await import('./vendor/near-connect.js?v=' + (import.meta.url.split('?v=')[1] || '1'));
   connector = new NearConnector({ network: 'testnet', autoConnect: true, excludedWallets: ['ethereum-wallets', 'near-cli'] });
   connector.on('wallet:signOut', () => { state.account = null; state.wallet = null; renderWallet(); });
   return connector;

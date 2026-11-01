@@ -32,6 +32,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: smoke, path: tools/smoke-connect.png, if-no-files-found: ignore }
+      - name: Cache-bust the page's files
+        run: sed -i "s#src=\"app.js\"#src=\"app.js?v=${GITHUB_SHA::7}\"#; s#href=\"style.css\"#href=\"style.css?v=${GITHUB_SHA::7}\"#" web/index.html && grep -n '?v=' web/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: web }
