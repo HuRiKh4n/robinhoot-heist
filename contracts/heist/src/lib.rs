@@ -135,7 +135,7 @@ pub struct LiveRound {
 }
 
 /// The loot multiplier after `ms` of flight (×100): e^(0.28 t + 0.012 t²), t in seconds.
-/// 2× after 2.3 s, 10× after 6.6 s, 100× after 11.2 s, 1000× after 14.6 s.
+/// About 2× after 2.3 s, 10× after 6.4 s, 1000× after 15 s.
 pub fn multiplier_at(ms: u64) -> u32 {
     let t = ms as f64 / 1000.0;
     let m = (0.28 * t + 0.012 * t * t).exp() * 100.0;
@@ -669,9 +669,9 @@ mod tests {
     #[test]
     fn the_flight_curve() {
         assert_eq!(multiplier_at(0), 100);
-        assert!((199..=201).contains(&multiplier_at(2_300)));
-        assert!((990..=1010).contains(&multiplier_at(6_600)));
-        assert_eq!(multiplier_at(15_000), MAX_ESCAPE);
+        assert_eq!(multiplier_at(2_300), 202);
+        assert_eq!(multiplier_at(6_600), 1070);
+        assert_eq!(multiplier_at(16_000), MAX_ESCAPE);
     }
 
     #[test]
@@ -690,7 +690,7 @@ mod tests {
             // Tapped at 5.00x but only 2.3 s have passed on-chain: clamped to what the arrow reached.
             testing_env!(ctx_at(player.clone(), seed.wrapping_add(7), 1_002_300).build());
             let h = c.cash_out(500);
-            assert!((199..=201).contains(&h.escape), "escape {}", h.escape);
+            assert_eq!(h.escape, 202);
             assert_eq!(h.won, h.crash >= h.escape);
             if h.won { wins += 1; assert_eq!(h.payout.0, 10 * COIN * h.escape as u128 / 100); }
             assert!(c.get_round(player).is_none());
