@@ -105,3 +105,26 @@ h3 { font: 600 20px 'Cormorant Garamond', serif; margin: 18px 0 6px; color: var(
 .field > span small { text-transform: none; letter-spacing: 0; font-family: 'DM Sans', sans-serif; color: #6fbf73; }
 .btn.go.flying { background: linear-gradient(180deg, #ff8a6b, #d0453a); color: #fff; animation: glow .5s ease-in-out infinite alternate; }
 @keyframes glow { from { box-shadow: 0 0 14px #d0453a55; } to { box-shadow: 0 0 34px #d0453aaa; } }
+
+/* Phones: the game first. Big stage, compact controls, RUN button always under your thumb. */
+html, body { overflow-x: hidden; }
+.game > * { min-width: 0; }
+@media (max-width: 860px) {
+  .hero { padding: 10px 0 2px; }
+  .hero .kicker, .hero .lead { display: none; }
+  h1 { font-size: 26px; margin: 2px 0; }
+  .game { grid-template-columns: minmax(0, 1fr); gap: 10px; margin: 6px 0 12px; }
+  .stage { min-height: 0; height: 56vh; height: 56svh; }
+  .readout { top: 10px; }
+  .mult { font-size: 60px; }
+  .verdict { font-size: 12px; letter-spacing: .12em; padding: 0 10px; }
+  .panel { padding: 12px; gap: 10px; padding-bottom: 88px; }
+  .input-row input { font-size: 17px; padding: 8px 10px; }
+  .modes button { padding: 8px 4px; font-size: 11px; }
+  .balance-row strong { font-size: 22px; }
+  .odds dt { font-size: 10px; }
+  .odds dd { font-size: 15px; }
+  .btn.go { position: fixed; left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); width: auto; z-index: 20; padding: 18px; font-size: 17px; }
+  .foot { padding-bottom: 100px; }
+}
+.panel > * { min-width: 0; } .modes { width: 100%; } .input-row .btn.tiny { flex: none; padding: 0 10px; }
