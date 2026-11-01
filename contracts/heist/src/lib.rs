@@ -264,6 +264,14 @@ impl Contract {
 
     /// Start a live heist. The bet waits in the contract while the arrow flies.
     fn start(&mut self, player: AccountId, bet: u128) -> PromiseOrValue<U128> {
+        // A heist left flying past its time is lost first, so the outlaw can go again.
+        if let Some(old) = self.rounds.get(&player).cloned() {
+            if env::block_timestamp_ms().saturating_sub(old.start_ms) > MAX_ROUND_MS {
+                self.rounds.remove(&player);
+                self.vault += old.reserved;
+                self.settle(player.clone(), old.bet, 0);
+            }
+        }
         if self.paused || bet < self.min_bet || self.rounds.contains_key(&player) {
             log!("Cannot start: vault closed, bet too small, or a heist is already flying. Refunded");
             return PromiseOrValue::Value(U128(bet));
@@ -712,6 +720,18 @@ mod tests {
         assert!(!h.won);
         assert_eq!(h.burned.0, 5 * COIN);
         assert!(c.get_round(p).is_none());
+    }
+
+    #[test]
+    fn an_expired_heist_is_settled_when_starting_again() {
+        let mut c = game();
+        let p: AccountId = "again.testnet".parse().unwrap();
+        testing_env!(ctx_at(token(), 4, 1_000).build());
+        let _ = c.ft_on_transfer(p.clone(), U128(10 * COIN), "{\"start\":{}}".into());
+        testing_env!(ctx_at(token(), 5, 1_000 + MAX_ROUND_MS + 1).build());
+        assert_eq!(refund(c.ft_on_transfer(p.clone(), U128(10 * COIN), "{\"start\":{}}".into())), 0);
+        assert_eq!(c.get_stats().heists, 1);
+        assert_eq!(c.get_round(p).unwrap().start_ms, 1_000 + MAX_ROUND_MS + 1);
     }
 
     #[test]
