@@ -1,0 +1,33 @@
+name: Contracts
+
+on:
+  push:
+    paths: ["contracts/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".github/workflows/contracts.yml"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust toolchain (from rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Unit tests
+        run: cargo test --workspace -- --nocapture
+      - name: Install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - name: Build the contracts (wasm)
+        run: |
+          mkdir -p out
+          for c in heist test-gold; do
+            (cd contracts/$c && cargo near build non-reproducible-wasm --no-abi)
+          done
+          cp target/near/the_heist/the_heist.wasm out/ || find target -name '*.wasm' -path '*near*' -exec cp {} out/ \;
+          cp target/near/test_gold/test_gold.wasm out/ 2>/dev/null || true
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: contracts-wasm
+          path: out/*.wasm

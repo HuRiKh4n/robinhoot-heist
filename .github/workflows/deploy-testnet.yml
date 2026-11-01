@@ -1,0 +1,33 @@
+name: Deploy to testnet
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-near
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://github.com/near/cargo-near/releases/latest/download/cargo-near-installer.sh | sh
+      - name: Build
+        run: |
+          for c in heist test-gold; do (cd contracts/$c && cargo near build non-reproducible-wasm --no-abi); done
+          mkdir -p out && cp target/near/the_heist/the_heist.wasm target/near/test_gold/test_gold.wasm out/
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Deploy, fund, smoke test, lock
+        run: |
+          cd scripts && npm install --no-audit --no-fund
+          node deploy-testnet.mjs ../out ../web/public/deployment.json
+      - name: Save the addresses
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public/deployment.json
+          git commit -m "Testnet deployment $(date -u +%Y-%m-%dT%H:%MZ)" && git push

@@ -1,0 +1,16 @@
+[package]
+name = "test-gold"
+version = "0.1.0"
+edition = "2021"
+description = "A free test coin (tGOLD) with a faucet, to play The Heist on testnet."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+near-contract-standards = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
