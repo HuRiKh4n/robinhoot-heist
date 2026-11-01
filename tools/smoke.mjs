@@ -14,5 +14,7 @@ console.log('recent:', (await p.textContent('#recent')).replace(/\s+/g, ' ').sli
 await p.click('#connect'); await p.waitForTimeout(6000);
 await p.screenshot({ path: 'smoke-connect.png' });
 console.log('note after connect:', await p.textContent('#note'));
+console.log('frames:', p.frames().map(f => f.url()).join(' | '));
+console.log('modal text:', (await p.evaluate(() => { const walk = n => [n.innerText || '', ...[...(n.querySelectorAll ? n.querySelectorAll('*') : [])].filter(e => e.shadowRoot).map(e => walk(e.shadowRoot))].join(' '); return walk(document.body); })).replace(/\s+/g, ' ').slice(-600));
 console.log(logs.join('\n'));
 await b.close();
