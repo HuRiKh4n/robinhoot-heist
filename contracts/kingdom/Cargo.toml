@@ -1,0 +1,16 @@
+[package]
+name = "robinhoot-kingdom"
+version = "0.1.0"
+edition = "2021"
+description = "RobinHoot: The Kingdom. Outlaws versus an AI Sheriff whose decisions are verified on-chain."
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
