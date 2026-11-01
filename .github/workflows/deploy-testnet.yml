@@ -24,10 +24,10 @@ jobs:
       - name: Deploy, fund, smoke test, lock
         run: |
           cd scripts && npm install --no-audit --no-fund
-          node deploy-testnet.mjs ../out ../web/public/deployment.json
+          node deploy-testnet.mjs ../out ../web/deployment.json
       - name: Save the addresses
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add web/public/deployment.json
+          git add web/deployment.json
           git commit -m "Testnet deployment $(date -u +%Y-%m-%dT%H:%MZ)" && git push

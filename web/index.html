@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The Heist · RobinHoot</title>
+  <meta name="description" content="A crash game on NEAR. Pick when you run, rob the Sheriff's vault. Every failed heist burns the coin and feeds the vault." />
+  <meta property="og:title" content="The Heist · RobinHoot" />
+  <meta property="og:description" content="Pick when you run. Rob the Sheriff's vault on NEAR. Every failed heist burns the coin." />
+  <meta property="og:image" content="assets/castle.webp" />
+  <link rel="icon" href="assets/fox-badge.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Oswald:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#"><img src="assets/fox-badge.png" alt="" width="36" height="36" /><span>THE HEIST</span><small>by RobinHoot</small></a>
+    <div class="wallet">
+      <span id="net" class="chip">TESTNET</span>
+      <button id="connect" class="btn ghost" type="button">Connect wallet</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="kicker">A crash game on NEAR</p>
+      <h1>Rob the Sheriff&rsquo;s vault</h1>
+      <p class="lead">The loot grows the longer you stay. Pick the moment you run <b>before</b> you go in. If the Sheriff catches you first, half your coins burn and half stay in the vault.</p>
+    </section>
+
+    <section class="game">
+      <div class="stage" id="stage">
+        <canvas id="canvas" aria-label="The heist: the loot multiplier grows until the Sheriff catches the thief"></canvas>
+        <div class="readout" aria-live="polite">
+          <div id="mult" class="mult">1.00×</div>
+          <div id="verdict" class="verdict">Choose your escape and go</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="modes" role="tablist" aria-label="Play mode">
+          <button type="button" role="tab" id="mode-practice" aria-selected="true">Practice · free</button>
+          <button type="button" role="tab" id="mode-chain" aria-selected="false">On-chain · tGOLD</button>
+        </div>
+
+        <div class="balance-row">
+          <span>Your coins</span>
+          <strong id="balance">1,000</strong>
+          <button id="faucet" class="btn small" type="button" hidden>Get 10,000 free tGOLD</button>
+        </div>
+
+        <label class="field">
+          <span>Bet</span>
+          <div class="input-row">
+            <input id="bet" type="number" inputmode="decimal" min="1" step="1" value="10" />
+            <button type="button" class="btn tiny" data-bet="half">½</button>
+            <button type="button" class="btn tiny" data-bet="double">2×</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Run away at</span>
+          <div class="input-row">
+            <input id="escape" type="number" inputmode="decimal" min="1.01" max="1000" step="0.01" value="2.00" />
+            <span class="suffix">×</span>
+          </div>
+          <div class="quick" id="quick">
+            <button type="button" data-x="1.5">1.5×</button><button type="button" data-x="2">2×</button><button type="button" data-x="3">3×</button><button type="button" data-x="5">5×</button><button type="button" data-x="10">10×</button><button type="button" data-x="50">50×</button>
+          </div>
+        </label>
+
+        <dl class="odds">
+          <div><dt>Chance to escape</dt><dd id="chance">48.50%</dd></div>
+          <div><dt>You win</dt><dd id="win">20</dd></div>
+          <div><dt>If caught: burned</dt><dd id="burn">5</dd></div>
+        </dl>
+
+        <button id="go" class="btn go" type="button">ROB THE VAULT</button>
+        <p id="note" class="note" role="status"></p>
+      </div>
+    </section>
+
+    <section class="board">
+      <div class="stats" id="stats">
+        <div><span>Vault</span><strong id="s-vault">–</strong></div>
+        <div><span>Heists</span><strong id="s-heists">–</strong></div>
+        <div><span>Escapes</span><strong id="s-escapes">–</strong></div>
+        <div><span>Burned forever</span><strong id="s-burned">–</strong></div>
+      </div>
+      <h2>Latest heists on-chain</h2>
+      <ol id="recent" class="recent"><li class="muted">Reading the chain…</li></ol>
+      <p class="contract">Contract <a id="contract-link" target="_blank" rel="noopener">…</a> · coin <a id="token-link" target="_blank" rel="noopener">…</a> · <span id="locked">no owner keys</span></p>
+    </section>
+
+    <section class="how">
+      <h2>How the heist works</h2>
+      <ol>
+        <li><b>You choose the escape.</b> Bet coins and pick the multiplier you run away at, from 1.01× to 1000×.</li>
+        <li><b>NEAR rolls the dice.</b> The contract mixes the block&rsquo;s random seed with your account and the heist number into a crash point: how far the heist goes before the Sheriff catches you.</li>
+        <li><b>Escape or get caught.</b> If the crash point reaches your escape, the contract pays you bet × escape on the spot. If not, half of your bet is burned for good and half stays in the vault for the next winners.</li>
+      </ol>
+      <h3>The odds, in the open</h3>
+      <p>The chance to reach any escape <i>x</i> is <b>97% ÷ x</b>: 48.5% at 2×, 9.7% at 10×. The Sheriff keeps a 3% edge, so the vault never runs dry, and one heist can never win more than 1% of the vault. Every heist is an on-chain event anyone can check.</p>
+      <h3>Why it matters for the coin</h3>
+      <p>Every failed heist burns coins forever, so the more the Guild plays, the scarcer the coin gets. The other half refills the vault that pays the winners.</p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>Built for NEAR HACKATHON 2026 · <a href="https://github.com/HuRiKh4n/robinhoot-heist" target="_blank" rel="noopener">source code</a></p>
+    <p>A game. Play only with what you can lose.</p>
+  </footer>
+
+  <audio id="sfx-hit" src="assets/fx-epic-hit.mp3" preload="auto"></audio>
+  <audio id="sfx-coins" src="assets/fx-coins.mp3" preload="auto"></audio>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

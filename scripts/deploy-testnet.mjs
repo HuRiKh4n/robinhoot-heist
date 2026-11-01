@@ -2,7 +2,8 @@
 // Keys are generated here and never stored: once this run ends, nobody holds a key to these contracts.
 // Usage: node deploy-testnet.mjs <dir with the_heist.wasm and test_gold.wasm> <output deployment.json>
 import { connect, keyStores, KeyPair, utils } from 'near-api-js';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 const [wasmDir, outFile] = process.argv.slice(2);
 const RPC = process.env.NEAR_RPC || 'https://test.rpc.fastnear.com';
@@ -70,5 +71,6 @@ console.log('burned so far', await view(goldId, 'ft_balance_of', { account_id: B
 for (const account of [gold, heist]) await account.deleteKey(key.getPublicKey());
 console.log('Keys deleted: the contracts are locked.');
 
+await mkdir(dirname(outFile), { recursive: true });
 await writeFile(outFile, JSON.stringify({ network: 'testnet', heist: heistId, token: goldId, burn: BURN, rpc: RPC, deployedAt: new Date().toISOString() }, null, 2) + '\n');
 console.log('Wrote', outFile);
