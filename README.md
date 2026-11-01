@@ -10,11 +10,14 @@ The Heist is the guild's game: you sneak into the Sheriff's vault, the loot mult
 
 ## How it plays
 
-1. **Pick your bet and your escape**, from 1.01× to 1000×.
-2. **NEAR rolls the dice.** The contract turns the block's random seed (mixed with your account and the heist number) into a *crash point*: how far the heist gets before the Sheriff catches the thief.
+1. **Loose the arrow.** Your bet goes into the contract (`{"start":{}}`) and Robin's arrow starts flying. The loot multiplier follows a fixed curve of time, `e^(0.28t + 0.012t²)`: about 2× after 2.3 s, 10× after 6.4 s, 1000× after 15 s.
+2. **Tap RUN** (`cash_out`). The contract measures the flight time with the chain's own clock and never lets you claim more than the arrow reached. Only now does NEAR roll the Sheriff's dice: the *crash point* where he snaps the arrow.
 3. **Escape or get caught**, settled in the same transaction:
-   - crash ≥ escape → you are paid **bet × escape** at once;
-   - crash < escape → **half of the bet is burned for good**, half stays in the vault that pays the next winners.
+   - crash ≥ your multiplier → you are paid **bet × multiplier** at once;
+   - crash < your multiplier → **half of the bet is burned for good**, half stays in the vault that pays the next winners.
+   - no RUN within 20 s → the Sheriff wins (settled by anyone with `settle_expired`, or automatically when you play again).
+
+Rolling the dice at the moment you run is what makes a tap-to-stop crash game honest on a blockchain: contract state is public, so a crash point fixed in advance could be read by anyone. Rolled at cash-out, it is unknown to everyone until then, and the odds are exactly those of choosing the same multiplier in advance. You can also pick a multiplier before you go (`{"heist":{"escape":250}}`, or the page's *run automatically* box).
 
 ## The mechanic (why it is good for the coin)
 
@@ -43,13 +46,16 @@ web/                  the game page (plain HTML/CSS/JS, no build step): practice
 Play by sending the coin to the contract with `ft_transfer_call`:
 
 ```jsonc
-// msg to play a heist, running away at 2.50x
+// msg to start a live heist, then call cash_out({"escape": 231}) when you run
+{"start": {}}
+// msg to play in one shot, running away at 2.50x
 {"heist": {"escape": 250}}
 // msg to top up the vault (anyone can)
 "fund"
 ```
 
-Views: `get_config`, `get_stats`, `get_recent({limit})`, `get_player({account})`, `max_bet({escape})`, `win_chance_bps({escape})`, `get_owed({account})`.
+Calls: `cash_out({escape})`, `settle_expired({player})`, `retry_owed({account})`.
+Views: `get_round({account})`, `multiplier({ms})`, `get_config`, `get_stats`, `get_recent({limit})`, `get_player({account})`, `max_bet({escape})`, `win_chance_bps({escape})`, `get_owed({account})`.
 Each heist emits an `EVENT_JSON` log (`standard: "heist"`) with the bet, escape, crash, result, payout and burn.
 A bet that cannot be played (vault paused, escape out of range, below the minimum, or a possible win above the cap) is refunded whole by the token in the same transaction.
 

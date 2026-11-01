@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   deploy:
@@ -31,3 +32,6 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/deployment.json
           git commit -m "Testnet deployment $(date -u +%Y-%m-%dT%H:%MZ)" && git push
+      - name: Republish the page with the new addresses
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh workflow run pages.yml --ref main
