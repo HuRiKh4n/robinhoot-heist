@@ -1,0 +1,17 @@
+[package]
+name = "the-heist"
+version = "0.1.0"
+edition = "2021"
+description = "The Heist: a crash game on NEAR. Lost heists burn the memecoin and feed the vault."
+license = "MIT"
+repository = "https://github.com/HuRiKh4n/robinhoot-heist"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+
+[dependencies]
+near-sdk = "5"
+
+[dev-dependencies]
+near-sdk = { version = "5", features = ["unit-testing"] }
