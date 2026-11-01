@@ -9,8 +9,8 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-near-sdk = "5"
+near-sdk = { version = "5", features = ["unstable"] }
 
 [dev-dependencies]
-near-sdk = { version = "5", features = ["unit-testing"] }
+near-sdk = { version = "5", features = ["unit-testing", "unstable"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
