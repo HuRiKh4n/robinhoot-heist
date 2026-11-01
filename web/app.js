@@ -129,7 +129,7 @@ let connector;
 async function getConnector() {
   if (connector) return connector;
   const { NearConnector } = await import('./vendor/near-connect.js');
-  connector = new NearConnector({ network: 'testnet', autoConnect: true, excludedWallets: ['ethereum-wallets'] });
+  connector = new NearConnector({ network: 'testnet', autoConnect: true, excludedWallets: ['ethereum-wallets', 'near-cli'] });
   connector.on('wallet:signOut', () => { state.account = null; state.wallet = null; renderWallet(); });
   return connector;
 }
@@ -204,24 +204,41 @@ function draw(t, { escape, caught, crash }) {
   if (escape <= mMax) {
     ctx.setLineDash([6, 6]); ctx.strokeStyle = '#6fbf73aa'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(pad.l, Y(escape)); ctx.lineTo(w - pad.r, Y(escape)); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#6fbf73'; ctx.fillText('YOU RUN AT ' + escape.toFixed(2) + '×', w - pad.r - 130, Y(escape) - 6);
+    ctx.fillStyle = '#6fbf73'; ctx.fillText('LOOT AT ' + escape.toFixed(2) + '×', w - pad.r - 130, Y(escape) - 6);
   }
 
-  // the loot curve
-  const grad = ctx.createLinearGradient(0, h, 0, pad.t);
-  grad.addColorStop(0, '#b8914a'); grad.addColorStop(1, caught ? '#d0453a' : '#f0d9a0');
-  ctx.strokeStyle = grad; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath();
+  // the arrow's flight: a glowing trail from Robin's bow
   const n = 80;
-  for (let i = 0; i <= n; i++) { const s = (t * i) / n; const x = X(s), y = Y(multAt(s)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
-  ctx.stroke();
-  ctx.lineTo(X(t), h - pad.b); ctx.lineTo(X(0), h - pad.b); ctx.closePath();
-  ctx.fillStyle = caught ? '#d0453a14' : '#d6b26a14'; ctx.fill();
+  ctx.lineCap = 'round';
+  for (let i = 1; i <= n; i++) {
+    const s0 = (t * (i - 1)) / n, s1 = (t * i) / n;
+    ctx.strokeStyle = caught ? `rgba(208,69,58,${0.15 + 0.6 * i / n})` : `rgba(240,217,160,${0.08 + 0.7 * i / n})`;
+    ctx.lineWidth = 1 + 3 * i / n;
+    ctx.beginPath(); ctx.moveTo(X(s0), Y(multAt(s0))); ctx.lineTo(X(s1), Y(multAt(s1))); ctx.stroke();
+  }
 
-  // runner
-  const x = X(t), y = Y(m), r = 26;
-  const img = caught ? sheriffImg : foxImg;
-  if (img.complete) ctx.drawImage(img, x - r, y - r, r * 2, r * 2);
-  if (caught && foxImg.complete) { ctx.globalAlpha = .5; ctx.drawImage(foxImg, x - r - 34, y - r + 14, r * 1.4, r * 1.4); ctx.globalAlpha = 1; }
+  // Robin at the bow, bottom left
+  const r = 24;
+  if (foxImg.complete) ctx.drawImage(foxImg, X(0) - r - 6, Y(1) - r * 2 + 6, r * 2, r * 2);
+
+  // the arrow at the tip, pointing along its flight
+  const x = X(t), y = Y(m);
+  const dt = 0.05, angle = Math.atan2(Y(multAt(t + dt)) - y, X(t + dt) - x);
+  drawArrow(x, y, caught ? angle + 0.9 : angle, caught);
+  if (!caught) for (let k = 0; k < 6; k++) { // sparks
+    ctx.fillStyle = `rgba(240,217,160,${Math.random() * 0.8})`;
+    ctx.fillRect(x - Math.cos(angle) * (20 + Math.random() * 30) + (Math.random() - .5) * 10, y - Math.sin(angle) * (20 + Math.random() * 30) + (Math.random() - .5) * 10, 2, 2);
+  }
+  if (caught && sheriffImg.complete) { const R = 30; ctx.drawImage(sheriffImg, x - R + 18, y - R - 26, R * 2, R * 2); }
+}
+function drawArrow(x, y, angle, broken) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
+  ctx.strokeStyle = broken ? '#8a3a32' : '#c9a464'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(-46, 0); ctx.lineTo(broken ? -12 : 0, 0); ctx.stroke(); // shaft (snapped when caught)
+  if (!broken) { ctx.fillStyle = '#f0d9a0'; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-2, -6); ctx.lineTo(-2, 6); ctx.closePath(); ctx.fill(); } // head
+  ctx.fillStyle = broken ? '#8a3a32' : '#d0453a'; // red fletching
+  for (const side of [-1, 1]) { ctx.beginPath(); ctx.moveTo(-46, 0); ctx.lineTo(-56, side * 8); ctx.lineTo(-40, 0); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
 }
 function niceSteps(max) {
   const raw = (max - 1) / 4; const p = 10 ** Math.floor(Math.log10(raw)); const s = [1, 2, 5, 10].map(k => k * p).find(k => k >= raw) || raw;
@@ -231,7 +248,7 @@ function niceSteps(max) {
 function animate({ crash, escape }) {
   return new Promise(resolve => {
     const stage = $('stage'), mult = $('mult'), verdict = $('verdict');
-    mult.className = 'mult'; verdict.textContent = 'Inside the vault…';
+    mult.className = 'mult'; verdict.textContent = 'Robin looses the arrow…';
     const tCrash = timeFor(crash), tEscape = timeFor(escape);
     const won = crash >= escape;
     let escapedShown = false;
@@ -246,17 +263,17 @@ function animate({ crash, escape }) {
       mult.textContent = m.toFixed(2) + '×';
       if (won && !escapedShown && m >= escape) {
         escapedShown = true; play('sfx-coins');
-        mult.classList.add('escaped'); verdict.textContent = 'Escaped with ' + escape.toFixed(2) + '×!';
+        mult.classList.add('escaped'); verdict.textContent = 'The arrow hit the loot at ' + escape.toFixed(2) + '×!';
         stage.classList.remove('flash-gold'); void stage.offsetWidth; stage.classList.add('flash-gold');
       }
       draw(t, { escape, caught: done, crash });
       if (!done) return requestAnimationFrame(frame);
       play('sfx-hit');
       if (!won) {
-        mult.classList.add('caught'); verdict.textContent = 'Caught by the Sheriff at ' + crash.toFixed(2) + '×';
+        mult.classList.add('caught'); verdict.textContent = 'The Sheriff snapped the arrow at ' + crash.toFixed(2) + '×';
         stage.classList.remove('flash-red'); void stage.offsetWidth; stage.classList.add('flash-red');
       } else {
-        verdict.textContent = 'Escaped at ' + escape.toFixed(2) + '× · the Sheriff struck at ' + crash.toFixed(2) + '×';
+        verdict.textContent = 'Loot taken at ' + escape.toFixed(2) + '× · the Sheriff snapped it at ' + crash.toFixed(2) + '×';
       }
       resolve(won);
     }
