@@ -288,7 +288,7 @@ impl Contract {
         if amount == 0 {
             return;
         }
-        ext_ft::ext(self.token.clone())
+        let _ = ext_ft::ext(self.token.clone())
             .with_attached_deposit(ONE_YOCTO)
             .with_static_gas(GAS_FT_TRANSFER)
             .ft_transfer(to.clone(), U128(amount), Some(memo.to_string()))
@@ -298,6 +298,7 @@ impl Contract {
     /// If a transfer fails (for example the winner is not registered with the coin), the coins are
     /// kept for them: `retry_owed` sends them again later.
     #[private]
+    #[allow(deprecated)]
     pub fn on_sent(&mut self, to: AccountId, amount: U128) -> bool {
         match env::promise_result(0) {
             PromiseResult::Successful(_) => true,
@@ -450,7 +451,7 @@ mod tests {
         testing_env!(ctx(accounts(0), 1).build());
         let mut c = Contract::new(accounts(0), token(), "burn.testnet".parse().unwrap(), None, None, U128(COIN));
         testing_env!(ctx(token(), 1).build());
-        c.ft_on_transfer(accounts(0), U128(1_000_000 * COIN), "\"fund\"".into());
+        let _ = c.ft_on_transfer(accounts(0), U128(1_000_000 * COIN), "\"fund\"".into());
         c
     }
     fn refund(v: PromiseOrValue<U128>) -> u128 {
@@ -480,7 +481,7 @@ mod tests {
         let mut c = game();
         testing_env!(ctx(accounts(2), 1).build());
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            c.ft_on_transfer(accounts(1), U128(COIN), "{\"heist\":{\"escape\":200}}".into());
+            let _ = c.ft_on_transfer(accounts(1), U128(COIN), "{\"heist\":{\"escape\":200}}".into());
         }));
         assert!(r.is_err());
     }
@@ -551,7 +552,7 @@ mod tests {
         let mut c = game();
         for i in 0..70u32 {
             testing_env!(ctx(token(), (i % 250) as u8).build());
-            c.ft_on_transfer(accounts(1), U128(COIN), "{\"heist\":{\"escape\":150}}".into());
+            let _ = c.ft_on_transfer(accounts(1), U128(COIN), "{\"heist\":{\"escape\":150}}".into());
         }
         let r = c.get_recent(None);
         assert_eq!(r.len(), 50);

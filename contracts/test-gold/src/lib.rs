@@ -6,7 +6,7 @@ use near_contract_standards::fungible_token::{FungibleToken, FungibleTokenCore, 
 use near_contract_standards::storage_management::{StorageBalance, StorageBalanceBounds, StorageManagement};
 use near_sdk::borsh::BorshSerialize;
 use near_sdk::json_types::U128;
-use near_sdk::{env, log, near, require, AccountId, BorshStorageKey, NearToken, PanicOnDefault, PromiseOrValue};
+use near_sdk::{env, log, near, AccountId, BorshStorageKey, NearToken, PanicOnDefault, PromiseOrValue};
 
 pub const DECIMALS: u8 = 18;
 pub const ONE: u128 = 1_000_000_000_000_000_000;
@@ -132,6 +132,6 @@ mod tests {
         c.faucet(None);
         c.faucet(None);
         assert_eq!(c.ft_balance_of(accounts(1)).0, 2 * FAUCET_AMOUNT);
-        require!(c.ft_total_supply().0 == 1_000_000 * ONE + 2 * FAUCET_AMOUNT);
+        assert_eq!(c.ft_total_supply().0, 1_000_000 * ONE + 2 * FAUCET_AMOUNT);
     }
 }
