@@ -8,7 +8,7 @@ p.on('console', m => logs.push(`[${m.type()}] ${m.text()}`));
 p.on('pageerror', e => logs.push(`[pageerror] ${e.message}`));
 p.on('requestfailed', r => logs.push(`[requestfailed] ${r.url()} ${r.failure()?.errorText}`));
 await p.goto(url, { waitUntil: 'networkidle' });
-await p.click('#go'); await p.waitForTimeout(4000);
+await p.click('#go'); await p.waitForTimeout(2500); await p.evaluate(() => document.getElementById('go').click()); await p.waitForTimeout(1500);
 console.log('practice:', await p.textContent('#note'));
 console.log('recent:', (await p.textContent('#recent')).replace(/\s+/g, ' ').slice(0, 200));
 await p.click('#connect'); await p.waitForTimeout(6000);

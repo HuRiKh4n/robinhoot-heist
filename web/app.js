@@ -40,6 +40,7 @@ const state = {
   chainBalance: null,
   maxBetRaw: null,
   running: false,
+  auto: false,
 };
 function localStorageGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function localStorageSet(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } }
@@ -289,24 +290,86 @@ function practiceCrash() {
   return Math.min(10000, Math.max(100, Math.floor((100 - EDGE * 100) / (1 - u)))) / 100;
 }
 
+// ---------- live flight: the arrow flies until you tap RUN ----------
+let runRequest = null; // set while an arrow is flying: call it to run
+function fly(startEpochMs, skewMs, planned) {
+  return new Promise(resolve => {
+    const stage = $('stage'), mult = $('mult'), verdict = $('verdict'), go = $('go');
+    mult.className = 'mult'; verdict.textContent = 'The arrow is flying… tap RUN!';
+    go.disabled = false; go.classList.remove('running'); go.classList.add('flying');
+    let done = false;
+    const finish = (escapeX100, expired) => {
+      if (done) return; done = true; runRequest = null; state.coolUntil = Date.now() + 1500;
+      go.classList.remove('flying'); lock(true);
+      resolve({ escapeX100, expired });
+    };
+    runRequest = () => {
+      const t = (Date.now() + skewMs - startEpochMs) / 1000;
+      finish(Math.max(101, Math.min(100000, Math.floor(multAt(Math.max(0, t)) * 100))), false);
+    };
+    function frame() {
+      if (done) return;
+      const t = Math.max(0, (Date.now() + skewMs - startEpochMs) / 1000);
+      const m = Math.min(1000, multAt(t));
+      mult.textContent = m.toFixed(2) + '×';
+      go.textContent = 'RUN! · ' + m.toFixed(2) + '×';
+      draw(t, { escape: planned, caught: false });
+      if (state.auto && m >= planned) return runRequest();
+      if (t * 1000 > 20000) return finish(0, true);
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  });
+}
+// Show the outcome once the dice is rolled: the arrow stops at your multiplier; the Sheriff's point is revealed.
+function reveal({ escape, crash, won }) {
+  const stage = $('stage'), mult = $('mult'), verdict = $('verdict');
+  play('sfx-hit');
+  if (won) {
+    play('sfx-coins');
+    mult.className = 'mult escaped'; mult.textContent = escape.toFixed(2) + '×';
+    verdict.textContent = 'You ran at ' + escape.toFixed(2) + '× · the Sheriff would have snapped it at ' + crash.toFixed(2) + '×';
+    draw(timeFor(Math.max(escape, 1.0001)), { escape, caught: false });
+    stage.classList.remove('flash-gold'); void stage.offsetWidth; stage.classList.add('flash-gold');
+  } else {
+    mult.className = 'mult caught'; mult.textContent = crash.toFixed(2) + '×';
+    verdict.textContent = escape ? 'Too late! The Sheriff snapped the arrow at ' + crash.toFixed(2) + '×' : 'You never ran: the Sheriff took it all';
+    draw(timeFor(Math.max(crash, 1.0001)), { escape: escape || 2, caught: true });
+    stage.classList.remove('flash-red'); void stage.offsetWidth; stage.classList.add('flash-red');
+  }
+}
+async function chainSkew() {
+  // How far the chain's clock is from this device's clock (block time minus local time).
+  try {
+    const r = await fetch(RPC, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 's', method: 'block', params: { finality: 'optimistic' } }) }).then(r => r.json());
+    return Number(BigInt(r.result.header.timestamp_nanosec) / 1000000n) - Date.now();
+  } catch { return 0; }
+}
+
 // ---------- play ----------
+$('auto').addEventListener('change', e => { state.auto = e.target.checked; });
 $('go').addEventListener('click', async () => {
-  if (state.running) return;
+  if (runRequest) return runRequest();
+  if (state.running || Date.now() < (state.coolUntil || 0)) return;
   const { bet, escape, escapeX100 } = readForm();
-  if (escapeX100 < 101 || escapeX100 > 100000) return note('Run away between 1.01× and 1000×.', true);
+  const planned = escapeX100 >= 101 ? escape : 2;
+  if (state.auto && (escapeX100 < 101 || escapeX100 > 100000)) return note('Set the green line between 1.01× and 1000×.', true);
   if (bet < 1) return note('The minimum bet is 1 coin.', true);
 
   if (state.mode === 'practice') {
     if (bet > state.practice) return note('Not enough practice coins.', true);
-    state.running = true; lock(true);
+    state.running = true; note('');
     state.practice -= bet; renderBalance();
-    const crash = practiceCrash();
-    const won = await animate({ crash, escape: escapeX100 / 100 });
-    if (won) state.practice += bet * escapeX100 / 100;
+    const { escapeX100: ran, expired } = await fly(Date.now(), 0, planned);
+    const crash = practiceCrash(); // rolled when you run, like the contract
+    const esc = expired ? 0 : ran / 100;
+    const won = !expired && crash >= esc;
+    reveal({ escape: esc, crash, won });
+    if (won) state.practice += bet * ran / 100;
     state.practice = Math.round(state.practice * 100) / 100;
     localStorageSet('heist:practice', String(state.practice));
-    renderBalance(); note(won ? `You escaped: +${fmt(bet * escapeX100 / 100 - bet)} coins.` : `Caught. ${fmt(bet / 2)} burned, ${fmt(bet / 2)} to the vault.`);
-    state.running = false; lock(false);
+    renderBalance(); note(won ? `You escaped: +${fmt(bet * ran / 100 - bet)} coins.` : `Caught. ${fmt(bet / 2)} burned, ${fmt(bet / 2)} to the vault.`);
+    state.running = false; lock(false); $('go').textContent = 'ROB THE VAULT';
     return;
   }
 
@@ -315,28 +378,40 @@ $('go').addEventListener('click', async () => {
   if (!state.account) { try { await connect(); } catch (e) { return note(e?.message || 'Wallet connection failed', true); } return; }
   const raw = toUnits(bet);
   if (state.chainBalance !== null && raw > BigInt(state.chainBalance)) return note('Not enough tGOLD: tap "Get 10,000 free tGOLD".', true);
-  if (state.maxBetRaw !== null && raw > state.maxBetRaw) return note(`The vault can cover at most ${fromUnits(state.maxBetRaw)} at ${escape.toFixed(2)}×.`, true);
   state.running = true; lock(true);
   try {
     const before = await view(deployment.heist, 'get_stats');
-    note('Approve the heist in your wallet…');
-    $('verdict').textContent = 'Sneaking past the guards…';
-    await sendTx(deployment.token, 'ft_transfer_call', { receiver_id: deployment.heist, amount: raw.toString(), msg: JSON.stringify({ heist: { escape: escapeX100 } }) }, '1', '150000000000000');
-    note('Reading the result from the chain…');
-    const heist = await findMyHeist(before.heists);
-    if (!heist) throw new Error('The heist was sent but its result is not visible yet. Check the list below in a moment.');
-    await animate({ crash: heist.crash / 100, escape: heist.escape / 100 });
-    note(heist.won ? `You escaped with ${fromUnits(heist.payout.toString())} tGOLD.` : `Caught. ${fromUnits(heist.burned.toString())} tGOLD burned forever.`);
+    note('Approve the bet in your wallet…');
+    $('verdict').textContent = 'Robin nocks an arrow…';
+    await sendTx(deployment.token, 'ft_transfer_call', { receiver_id: deployment.heist, amount: raw.toString(), msg: JSON.stringify({ start: {} }) }, '1', '150000000000000');
+    note('');
+    let round = null;
+    for (let i = 0; i < 20 && !round; i++) { round = await view(deployment.heist, 'get_round', { account: state.account }).catch(() => null); if (!round) await new Promise(r => setTimeout(r, 1000)); }
+    if (!round) throw new Error('The bet was not accepted (refunded). Try a smaller bet.');
+    const skew = await chainSkew();
+    const { escapeX100: ran, expired } = await fly(round.start_ms, skew, planned);
+    $('verdict').textContent = expired ? 'Too slow…' : `You ran at ${(ran / 100).toFixed(2)}× · approve in your wallet`;
+    if (!expired) await sendTx(deployment.heist, 'cash_out', { escape: ran }, '0', '50000000000000');
+    note('NEAR is rolling the Sheriff’s dice…');
+    const heist = expired ? null : await findMyHeist(before.heists);
+    if (heist) {
+      reveal({ escape: heist.escape / 100, crash: heist.crash / 100, won: heist.won });
+      note(heist.won ? `You escaped with ${fromUnits(heist.payout.toString())} tGOLD.` : `Caught. ${fromUnits(heist.burned.toString())} tGOLD burned forever.`);
+    } else if (expired) {
+      reveal({ escape: 0, crash: 1, won: false });
+      note('Too slow: the Sheriff wins this one (it is settled when you play again).');
+    } else throw new Error('The result is not visible yet. Check the list below in a moment.');
     await Promise.all([refreshChainBalance(), refreshBoard()]);
   } catch (e) {
+    runRequest = null;
     note(e?.message || 'The heist did not go through.', true);
-    $('verdict').textContent = 'Choose your escape and go';
-  } finally { state.running = false; lock(false); }
+    $('verdict').textContent = 'Try again';
+  } finally { state.running = false; lock(false); $('go').classList.remove('flying'); renderBalance(); }
 });
 async function findMyHeist(fromId) {
   for (let i = 0; i < 20; i++) {
     const list = await view(deployment.heist, 'get_recent', { limit: 20 }).catch(() => []);
-    const mine = list.filter(h => h.player === state.account && h.id >= fromId).sort((a, b) => a.id - b.id)[0];
+    const mine = list.filter(h => h.player === state.account && h.id >= fromId && h.escape > 0).sort((a, b) => b.id - a.id)[0];
     if (mine) return mine;
     await new Promise(r => setTimeout(r, 1500));
   }
@@ -355,8 +430,8 @@ async function refreshBoard() {
     $('s-burned').textContent = fromUnits(stats.burned, 0) + ' tGOLD';
     $('recent').innerHTML = recent.length ? recent.map(h => `<li class="${h.player === state.account ? 'mine' : ''}">
       <span class="who" title="${h.player}">#${h.id} · ${short(h.player)}</span>
-      <span class="bet">${fromUnits(h.bet)} at ${(h.escape / 100).toFixed(2)}×</span>
-      <span>crash ${(h.crash / 100).toFixed(2)}×</span>
+      <span class="bet">${fromUnits(h.bet)} ${h.escape ? 'ran at ' + (h.escape / 100).toFixed(2) + '×' : 'never ran'}</span>
+      <span>snapped ${(h.crash / 100).toFixed(2)}×</span>
       <span class="${h.won ? 'won' : 'lost'}">${h.won ? '+' + fromUnits(h.payout) : '🔥 ' + fromUnits(h.burned)}</span></li>`).join('') : '<li class="muted">No heists yet. Be the first.</li>';
   } catch { $('recent').innerHTML = '<li class="muted">Could not reach NEAR testnet right now.</li>'; }
 }

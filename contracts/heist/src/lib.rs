@@ -27,6 +27,8 @@ pub const MIN_ESCAPE: u32 = 101; // 1.01x
 pub const MAX_ESCAPE: u32 = 100_000; // 1000x
 pub const MAX_CRASH: u32 = 1_000_000; // 10000x, a ceiling for display only
 const RECENT: u32 = 50;
+/// A live heist ends after 20 s: if the outlaw has not run by then, the Sheriff wins.
+pub const MAX_ROUND_MS: u64 = 20_000;
 const GAS_FT_TRANSFER: Gas = Gas::from_tgas(10);
 const GAS_CALLBACK: Gas = Gas::from_tgas(10);
 const ONE_YOCTO: NearToken = NearToken::from_yoctonear(1);
@@ -37,6 +39,7 @@ enum Key {
     Recent,
     Owed,
     Players,
+    Rounds,
 }
 
 #[derive(BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -110,13 +113,44 @@ struct PlayerRecord {
     best_escape: u32,
 }
 
+/// A live heist: the arrow is flying until the outlaw calls `cash_out`.
+#[derive(BorshSerialize, BorshDeserialize, Clone)]
+#[borsh(crate = "near_sdk::borsh")]
+struct Round {
+    bet: u128,
+    start_ms: u64,
+    /// Highest escape this bet may reach (the vault's per-heist cap), ×100.
+    cap: u32,
+    /// Profit set aside from the vault for this heist while it is live.
+    reserved: u128,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(crate = "near_sdk::serde")]
+pub struct LiveRound {
+    pub bet: U128,
+    pub start_ms: u64,
+    pub expires_ms: u64,
+    pub cap: u32,
+}
+
+/// The loot multiplier after `ms` of flight (×100): e^(0.28 t + 0.012 t²), t in seconds.
+/// About 2× after 2.3 s, 10× after 6.4 s, 1000× after 15 s.
+pub fn multiplier_at(ms: u64) -> u32 {
+    let t = ms as f64 / 1000.0;
+    let m = (0.28 * t + 0.012 * t * t).exp() * 100.0;
+    if m >= MAX_ESCAPE as f64 { MAX_ESCAPE } else { m as u32 }
+}
+
 /// What the outlaw writes in the `msg` of `ft_transfer_call`.
 #[derive(Deserialize)]
 #[serde(crate = "near_sdk::serde")]
 #[serde(rename_all = "snake_case")]
 enum Message {
-    /// Play a heist, running away at `escape` (×100, e.g. 200 = 2.00x).
+    /// Play a heist, running away at `escape` (×100, e.g. 200 = 2.00x), settled at once.
     Heist { escape: u32 },
+    /// Start a live heist: the arrow flies until the outlaw calls `cash_out`.
+    Start {},
     /// Add coins to the vault (anyone can top it up; nobody gets anything back).
     Fund,
 }
@@ -144,6 +178,7 @@ pub struct Contract {
     /// Payouts or burns whose transfer failed, kept safe until retried.
     owed: LookupMap<AccountId, u128>,
     players: LookupMap<AccountId, PlayerRecord>,
+    rounds: LookupMap<AccountId, Round>,
 }
 
 #[near]
@@ -178,6 +213,7 @@ impl Contract {
             next_id: 0,
             owed: LookupMap::new(Key::Owed),
             players: LookupMap::new(Key::Players),
+            rounds: LookupMap::new(Key::Rounds),
         }
     }
 
@@ -188,7 +224,7 @@ impl Contract {
         let amount = amount.0;
         let message: Message = match near_sdk::serde_json::from_str(&msg) {
             Ok(message) => message,
-            Err(_) => env::panic_str("msg must be {\"heist\":{\"escape\":200}} or \"fund\""),
+            Err(_) => env::panic_str("msg must be {\"heist\":{\"escape\":200}}, {\"start\":{}} or \"fund\""),
         };
         match message {
             Message::Fund => {
@@ -197,6 +233,7 @@ impl Contract {
                 PromiseOrValue::Value(U128(0))
             }
             Message::Heist { escape } => self.play(sender_id, amount, escape),
+            Message::Start {} => self.start(sender_id, amount),
         }
     }
 
@@ -221,8 +258,69 @@ impl Contract {
             return PromiseOrValue::Value(U128(bet));
         }
 
+        self.settle(player, bet, escape);
+        PromiseOrValue::Value(U128(0))
+    }
+
+    /// Start a live heist. The bet waits in the contract while the arrow flies.
+    fn start(&mut self, player: AccountId, bet: u128) -> PromiseOrValue<U128> {
+        // A heist left flying past its time is lost first, so the outlaw can go again.
+        if let Some(old) = self.rounds.get(&player).cloned() {
+            if env::block_timestamp_ms().saturating_sub(old.start_ms) > MAX_ROUND_MS {
+                self.rounds.remove(&player);
+                self.vault += old.reserved;
+                self.settle(player.clone(), old.bet, 0);
+            }
+        }
+        if self.paused || bet < self.min_bet || self.rounds.contains_key(&player) {
+            log!("Cannot start: vault closed, bet too small, or a heist is already flying. Refunded");
+            return PromiseOrValue::Value(U128(bet));
+        }
+        // The highest escape the vault allows for this bet, and the profit reserved for it.
+        let cap = (X + self.max_win() * X / bet).min(MAX_ESCAPE as u128) as u32;
+        if cap < MIN_ESCAPE {
+            log!("Bet too big for the vault right now: refunded");
+            return PromiseOrValue::Value(U128(bet));
+        }
+        let reserved = bet * cap as u128 / X - bet;
+        self.vault -= reserved;
+        let start_ms = env::block_timestamp_ms();
+        self.rounds.insert(player.clone(), Round { bet, start_ms, cap, reserved });
+        log!("EVENT_JSON:{{\"standard\":\"heist\",\"version\":\"1.0.0\",\"event\":\"start\",\"data\":[{{\"player\":\"{}\",\"bet\":\"{}\",\"start_ms\":{},\"cap\":{}}}]}}", player, bet, start_ms, cap);
+        PromiseOrValue::Value(U128(0))
+    }
+
+    /// Run! `escape` is the multiplier the outlaw saw when they tapped (×100). It is checked against
+    /// the flight time measured by the chain (never more than the arrow could have reached), and only
+    /// now does NEAR roll the Sheriff's dice: the odds are the same as choosing that escape in advance.
+    pub fn cash_out(&mut self, escape: u32) -> Heist {
+        let player = env::predecessor_account_id();
+        let round = self.rounds.remove(&player).unwrap_or_else(|| env::panic_str("No heist in flight"));
+        self.vault += round.reserved;
+        let elapsed = env::block_timestamp_ms().saturating_sub(round.start_ms);
+        if elapsed > MAX_ROUND_MS {
+            return self.settle(player, round.bet, 0);
+        }
+        let reached = multiplier_at(elapsed);
+        let escape = escape.min(reached).min(round.cap).max(MIN_ESCAPE);
+        self.settle(player, round.bet, escape)
+    }
+
+    /// After 20 s anyone can close a heist that never ran: the Sheriff wins it.
+    pub fn settle_expired(&mut self, player: AccountId) -> Heist {
+        let round = self.rounds.get(&player).cloned().unwrap_or_else(|| env::panic_str("No heist in flight"));
+        require!(env::block_timestamp_ms().saturating_sub(round.start_ms) > MAX_ROUND_MS, "Still in flight");
+        self.rounds.remove(&player);
+        self.vault += round.reserved;
+        self.settle(player, round.bet, 0)
+    }
+
+    /// Roll the dice and settle: pay bet × escape, or burn half and keep half in the vault.
+    /// `escape` 0 means the outlaw never ran (always lost).
+    fn settle(&mut self, player: AccountId, bet: u128, escape: u32) -> Heist {
         let crash = roll(&env::random_seed(), &player, self.next_id, self.edge_bps);
-        let won = crash >= escape;
+        let won = escape > 0 && crash >= escape;
+        let payout = bet * escape as u128 / X;
         let burned = if won { 0 } else { bet / 2 };
         let heist = Heist {
             id: self.next_id,
@@ -245,14 +343,14 @@ impl Contract {
         );
 
         if won {
-            self.vault -= profit;
+            self.vault -= payout - bet;
             self.send(player, payout, "The Heist: you escaped with the loot");
         } else {
             // Half stays in the vault, half is burned.
             self.vault += bet - burned;
             self.send(self.burn_account.clone(), burned, "The Heist: burned by the Sheriff");
         }
-        PromiseOrValue::Value(U128(0))
+        heist
     }
 
     fn record(&mut self, heist: &Heist) {
@@ -407,6 +505,16 @@ impl Contract {
     pub fn get_owed(&self, account: AccountId) -> U128 {
         U128(self.owed.get(&account).copied().unwrap_or(0))
     }
+
+    /// The heist this account has in flight, if any.
+    pub fn get_round(&self, account: AccountId) -> Option<LiveRound> {
+        self.rounds.get(&account).map(|r| LiveRound { bet: U128(r.bet), start_ms: r.start_ms, expires_ms: r.start_ms + MAX_ROUND_MS, cap: r.cap })
+    }
+
+    /// The loot multiplier (×100) after `ms` of flight, the same curve the page draws.
+    pub fn multiplier(&self, ms: u64) -> u32 {
+        multiplier_at(ms)
+    }
 }
 
 /// The crash point (×100) from the block's random seed, the player and the heist number.
@@ -558,6 +666,72 @@ mod tests {
         assert_eq!(r.len(), 50);
         assert_eq!(r[0].id, 69);
         assert_eq!(r[49].id, 20);
+    }
+
+    fn ctx_at(predecessor: AccountId, seed: u8, ms: u64) -> VMContextBuilder {
+        let mut b = ctx(predecessor, seed);
+        b.block_timestamp(ms * 1_000_000);
+        b
+    }
+
+    #[test]
+    fn the_flight_curve() {
+        assert_eq!(multiplier_at(0), 100);
+        assert_eq!(multiplier_at(2_300), 202);
+        assert_eq!(multiplier_at(6_600), 1070);
+        assert_eq!(multiplier_at(16_000), MAX_ESCAPE);
+    }
+
+    #[test]
+    fn a_live_heist_cashes_out_at_the_flight_time() {
+        let mut c = game();
+        let vault0 = c.vault;
+        let mut wins = 0;
+        for seed in 0..40u8 {
+            let player: AccountId = format!("outlaw{seed}.testnet").parse().unwrap();
+            testing_env!(ctx_at(token(), seed, 1_000_000).build());
+            assert_eq!(refund(c.ft_on_transfer(player.clone(), U128(10 * COIN), "{\"start\":{}}".into())), 0);
+            let r = c.get_round(player.clone()).unwrap();
+            assert_eq!(r.start_ms, 1_000_000);
+            // A second start while flying is refunded.
+            assert_eq!(refund(c.ft_on_transfer(player.clone(), U128(10 * COIN), "{\"start\":{}}".into())), 10 * COIN);
+            // Tapped at 5.00x but only 2.3 s have passed on-chain: clamped to what the arrow reached.
+            testing_env!(ctx_at(player.clone(), seed.wrapping_add(7), 1_002_300).build());
+            let h = c.cash_out(500);
+            assert_eq!(h.escape, 202);
+            assert_eq!(h.won, h.crash >= h.escape);
+            if h.won { wins += 1; assert_eq!(h.payout.0, 10 * COIN * h.escape as u128 / 100); }
+            assert!(c.get_round(player).is_none());
+        }
+        assert!(wins > 5 && wins < 35);
+        // Nothing stays reserved once every heist has landed.
+        let s = c.get_stats();
+        assert_eq!(c.vault, vault0 + s.wagered.0 - s.paid.0 - s.burned.0);
+    }
+
+    #[test]
+    fn a_heist_that_never_runs_is_lost() {
+        let mut c = game();
+        let p: AccountId = "slow.testnet".parse().unwrap();
+        testing_env!(ctx_at(token(), 9, 5_000).build());
+        let _ = c.ft_on_transfer(p.clone(), U128(10 * COIN), "{\"start\":{}}".into());
+        testing_env!(ctx_at(accounts(3), 9, 5_000 + MAX_ROUND_MS + 1).build());
+        let h = c.settle_expired(p.clone());
+        assert!(!h.won);
+        assert_eq!(h.burned.0, 5 * COIN);
+        assert!(c.get_round(p).is_none());
+    }
+
+    #[test]
+    fn an_expired_heist_is_settled_when_starting_again() {
+        let mut c = game();
+        let p: AccountId = "again.testnet".parse().unwrap();
+        testing_env!(ctx_at(token(), 4, 1_000).build());
+        let _ = c.ft_on_transfer(p.clone(), U128(10 * COIN), "{\"start\":{}}".into());
+        testing_env!(ctx_at(token(), 5, 1_000 + MAX_ROUND_MS + 1).build());
+        assert_eq!(refund(c.ft_on_transfer(p.clone(), U128(10 * COIN), "{\"start\":{}}".into())), 0);
+        assert_eq!(c.get_stats().heists, 1);
+        assert_eq!(c.get_round(p).unwrap().start_ms, 1_000 + MAX_ROUND_MS + 1);
     }
 
     #[test]

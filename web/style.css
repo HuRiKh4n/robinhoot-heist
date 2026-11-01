@@ -99,3 +99,9 @@ h3 { font: 600 20px 'Cormorant Garamond', serif; margin: 18px 0 6px; color: var(
   .btn.ghost { padding: 8px 10px; font-size: 11px; white-space: nowrap; }
   .chip { display: none; }
 }
+
+.auto { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.auto input { accent-color: var(--gold); width: 16px; height: 16px; }
+.field > span small { text-transform: none; letter-spacing: 0; font-family: 'DM Sans', sans-serif; color: #6fbf73; }
+.btn.go.flying { background: linear-gradient(180deg, #ff8a6b, #d0453a); color: #fff; animation: glow .5s ease-in-out infinite alternate; }
+@keyframes glow { from { box-shadow: 0 0 14px #d0453a55; } to { box-shadow: 0 0 34px #d0453aaa; } }
