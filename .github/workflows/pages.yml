@@ -22,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: Bundle the wallet selector
-        run: cd tools && npm install --no-audit --no-fund && node bundle.mjs
+        run: cd tools && npm install --no-audit --no-fund && npm ls @hot-labs/near-connect && node bundle.mjs
       - name: Smoke test in a real browser
         continue-on-error: true
         run: |
