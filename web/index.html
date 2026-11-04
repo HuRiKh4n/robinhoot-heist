@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>The Heist · RobinHoot</title>
-  <meta name="description" content="A crash game on NEAR. Pick when you run, rob the Sheriff's vault. Every failed heist burns the coin and feeds the vault." />
+  <meta name="description" content="A crash game on NEAR. Pick when you run, rob the Sheriff's vault. Every failed heist feeds the vault that pays the winners." />
   <meta property="og:title" content="The Heist · RobinHoot" />
-  <meta property="og:description" content="Pick when you run. Rob the Sheriff's vault on NEAR. Every failed heist burns the coin." />
+  <meta property="og:description" content="Pick when you run. Rob the Sheriff's vault on NEAR." />
   <meta property="og:image" content="assets/castle.webp" />
   <link rel="icon" href="assets/fox-badge.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -27,7 +27,7 @@
     <section class="hero">
       <p class="kicker">A crash game on NEAR</p>
       <h1>Rob the Sheriff&rsquo;s vault</h1>
-      <p class="lead">Robin looses the arrow and the loot grows the longer it flies. <b>Tap RUN</b> to grab it. Wait too long and the Sheriff snaps the arrow: half your coins burn, half stay in the vault.</p>
+      <p class="lead">Robin looses the arrow and the loot grows the longer it flies. <b>Tap RUN</b> to grab it. Wait too long and the Sheriff snaps the arrow: your coins stay in his vault.</p>
     </section>
 
     <section class="game">
@@ -76,7 +76,7 @@
         <dl class="odds">
           <div><dt>Chance to escape</dt><dd id="chance">48.50%</dd></div>
           <div><dt>You win</dt><dd id="win">20</dd></div>
-          <div><dt>If caught: burned</dt><dd id="burn">5</dd></div>
+          <div><dt>If caught: you lose</dt><dd id="burn">5</dd></div>
         </dl>
 
         <button id="go" class="btn go" type="button">ROB THE VAULT</button>
@@ -89,7 +89,7 @@
         <div><span>Vault</span><strong id="s-vault">–</strong></div>
         <div><span>Heists</span><strong id="s-heists">–</strong></div>
         <div><span>Escapes</span><strong id="s-escapes">–</strong></div>
-        <div><span>Burned forever</span><strong id="s-burned">–</strong></div>
+        <div><span>Paid to outlaws</span><strong id="s-burned">–</strong></div>
       </div>
       <h2>Latest heists on-chain</h2>
       <ol id="recent" class="recent"><li class="muted">Reading the chain…</li></ol>
@@ -101,12 +101,12 @@
       <ol>
         <li><b>Loose the arrow.</b> Your bet goes into the contract and the arrow starts flying. The loot multiplier follows a fixed curve of time: 2× after about 2.3 seconds, 10× after 6.4, up to 1000×.</li>
         <li><b>Tap RUN.</b> The contract checks the flight time on the chain (you can never claim more than the arrow reached) and only then NEAR rolls the Sheriff&rsquo;s dice: the point where he snaps the arrow.</li>
-        <li><b>Escape or get caught.</b> If the Sheriff&rsquo;s point is at or past yours, you are paid bet × your multiplier on the spot. If not, half of your bet is burned for good and half stays in the vault. Wait more than 20 seconds and the Sheriff wins.</li>
+        <li><b>Escape or get caught.</b> If the Sheriff&rsquo;s point is at or past yours, you are paid bet × your multiplier on the spot. If not, your bet stays in the vault. Wait more than 20 seconds and the Sheriff wins.</li>
       </ol>
       <h3>The odds, in the open</h3>
-      <p>Run at any multiplier <i>x</i> and your chance is <b>97% ÷ x</b>: 48.5% at 2×, 9.7% at 10×. Because the dice is rolled when you run, waiting changes how much you win and how likely you are to win it, never the fairness. The Sheriff keeps a 3% edge, so the vault never runs dry, and one heist can never win more than 1% of the vault. Every heist is an on-chain event anyone can check.</p>
-      <h3>Why it matters for the coin</h3>
-      <p>Every failed heist burns coins forever, so the more the Guild plays, the scarcer the coin gets. The other half refills the vault that pays the winners.</p>
+      <p>Run at any multiplier <i>x</i> and your chance is <b>97% ÷ x</b>: 48.5% at 2×, 9.7% at 10×. Because the dice is rolled when you run, waiting changes how much you win and how likely you are to win it, never the fairness. The Sheriff keeps a 3% edge, so the vault never runs dry, and one heist can never win more than 10% of the vault. Every heist is an on-chain event anyone can check.</p>
+      <h3>Where the loot comes from</h3>
+      <p>Every failed heist refills the vault that pays the winners. The vault is funded by the Guild&rsquo;s marketing wallet, and every coin in or out is a public event on the chain.</p>
     </section>
   </main>
 

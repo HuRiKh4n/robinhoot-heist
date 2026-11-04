@@ -50,7 +50,7 @@ await call(gold, goldId, 'new', { owner: goldId, supply: (1_000_000_000n * ONE).
 
 console.log('Deploying The Heist');
 await heist.deployContract(await readFile(`${wasmDir}/the_heist.wasm`));
-await call(heist, heistId, 'new', { owner: heistId, token: goldId, burn_account: BURN, edge_bps: 300, max_win_bps: 100, min_bet: ONE.toString() });
+await call(heist, heistId, 'new', { owner: heistId, token: goldId, burn_account: BURN, edge_bps: 300, max_win_bps: 1000, min_bet: ONE.toString() });
 
 console.log('Registering the vault and the burn address with tGOLD');
 await call(gold, goldId, 'faucet', { account: heistId });

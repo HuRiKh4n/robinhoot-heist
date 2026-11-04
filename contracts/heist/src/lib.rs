@@ -5,12 +5,12 @@
 //! Sheriff catches the thief (the "crash"), using NEAR's on-chain randomness:
 //!
 //! * crash >= escape: the outlaw escapes and is paid `bet * escape` at once.
-//! * crash <  escape: the heist fails. Half of the bet is burned, half stays in the vault
-//!   that pays the next winners.
+//! * crash <  escape: the heist fails. The whole bet goes into the vault that pays the next winners.
 //!
 //! The house edge is fixed at deploy time (3% by default): P(crash >= x) = (1 - edge) / x.
-//! A single heist can never win more than a small share of the vault, so the vault cannot be
-//! drained by one lucky roll.
+//! A single heist can never win more than a set share of the vault (10% by default), so one lucky
+//! roll can never drain it. The vault is funded by the guild's marketing wallet (the owner), who can
+//! add to it or take coins out, always with a public on-chain event.
 
 use near_sdk::borsh::{BorshDeserialize, BorshSerialize};
 use near_sdk::json_types::U128;
@@ -183,9 +183,9 @@ pub struct Contract {
 
 #[near]
 impl Contract {
-    /// `token`: the memecoin contract. `burn_account`: an account with no keys where burned coins
-    /// are sent (anyone can check it can never move them). `edge_bps`: house edge (300 = 3%).
-    /// `max_win_bps`: the most a single heist can win, as a share of the vault (100 = 1%).
+    /// `token`: the memecoin contract. `burn_account`: kept for compatibility, no longer used (nothing is burned).
+    /// `edge_bps`: house edge (300 = 3%). `max_win_bps`: the most a single heist can win, as a share of
+    /// the vault (1000 = 10%, the default).
     #[init]
     pub fn new(
         owner: AccountId,
@@ -196,7 +196,7 @@ impl Contract {
         min_bet: U128,
     ) -> Self {
         let edge_bps = edge_bps.unwrap_or(300);
-        let max_win_bps = max_win_bps.unwrap_or(100);
+        let max_win_bps = max_win_bps.unwrap_or(1000);
         require!(edge_bps >= 100 && edge_bps <= 1000, "Edge must be between 1% and 10%");
         require!(max_win_bps >= 10 && max_win_bps <= 1000, "Max win must be between 0.1% and 10% of the vault");
         Self {
@@ -315,13 +315,13 @@ impl Contract {
         self.settle(player, round.bet, 0)
     }
 
-    /// Roll the dice and settle: pay bet × escape, or burn half and keep half in the vault.
+    /// Roll the dice and settle: pay bet × escape, or keep the whole bet in the vault.
     /// `escape` 0 means the outlaw never ran (always lost).
     fn settle(&mut self, player: AccountId, bet: u128, escape: u32) -> Heist {
         let crash = roll(&env::random_seed(), &player, self.next_id, self.edge_bps);
         let won = escape > 0 && crash >= escape;
         let payout = bet * escape as u128 / X;
-        let burned = if won { 0 } else { bet / 2 };
+        let burned = 0; // nothing is burned: a lost bet stays in the vault
         let heist = Heist {
             id: self.next_id,
             player: player.clone(),
@@ -346,9 +346,8 @@ impl Contract {
             self.vault -= payout - bet;
             self.send(player, payout, "The Heist: you escaped with the loot");
         } else {
-            // Half stays in the vault, half is burned.
-            self.vault += bet - burned;
-            self.send(self.burn_account.clone(), burned, "The Heist: burned by the Sheriff");
+            // The whole bet stays in the vault.
+            self.vault += bet;
         }
         heist
     }
@@ -557,7 +556,7 @@ mod tests {
     }
     fn game() -> Contract {
         testing_env!(ctx(accounts(0), 1).build());
-        let mut c = Contract::new(accounts(0), token(), "burn.testnet".parse().unwrap(), None, None, U128(COIN));
+        let mut c = Contract::new(accounts(0), token(), "burn.testnet".parse().unwrap(), None, Some(100), U128(COIN));
         testing_env!(ctx(token(), 1).build());
         let _ = c.ft_on_transfer(accounts(0), U128(1_000_000 * COIN), "\"fund\"".into());
         c
@@ -611,8 +610,8 @@ mod tests {
                 assert!(h.crash >= 200);
             } else {
                 lost += 1;
-                assert_eq!(h.burned.0, 5 * COIN);
-                assert_eq!(c.vault, before + 5 * COIN);
+                assert_eq!(h.burned.0, 0);
+                assert_eq!(c.vault, before + 10 * COIN);
                 assert!(h.crash < 200);
             }
             assert!(get_logs().iter().any(|l| l.starts_with("EVENT_JSON:") && l.contains("\"event\":\"heist\"")));
@@ -622,9 +621,9 @@ mod tests {
         assert_eq!(s.heists, 60);
         assert_eq!(s.escapes as u32, won);
         assert_eq!(s.wagered.0, 600 * COIN);
-        assert_eq!(s.burned.0, lost as u128 * 5 * COIN);
-        // vault = start - profits paid + half of each lost bet
-        assert_eq!(c.vault, start - won as u128 * 10 * COIN + lost as u128 * 5 * COIN);
+        assert_eq!(s.burned.0, 0);
+        // vault = start - profits paid + every lost bet
+        assert_eq!(c.vault, start - won as u128 * 10 * COIN + lost as u128 * 10 * COIN);
         let p = c.get_player(accounts(1));
         assert_eq!(p.heists, 60);
         assert_eq!(p.escapes as u32, won);
@@ -718,7 +717,7 @@ mod tests {
         testing_env!(ctx_at(accounts(3), 9, 5_000 + MAX_ROUND_MS + 1).build());
         let h = c.settle_expired(p.clone());
         assert!(!h.won);
-        assert_eq!(h.burned.0, 5 * COIN);
+        assert_eq!(h.burned.0, 0);
         assert!(c.get_round(p).is_none());
     }
 
@@ -740,4 +739,16 @@ mod tests {
         assert_eq!(c.win_chance_bps(200), 4850);
         assert_eq!(c.win_chance_bps(1000), 970);
     }
+
+    #[test]
+    fn by_default_one_heist_can_win_up_to_10_percent_of_the_vault() {
+        testing_env!(ctx(accounts(0), 1).build());
+        let mut c = Contract::new(accounts(0), token(), "burn.testnet".parse().unwrap(), None, None, U128(COIN));
+        testing_env!(ctx(token(), 1).build());
+        let _ = c.ft_on_transfer(accounts(0), U128(30_000_000 * COIN), "\"fund\"".into());
+        // 10% of 30M = 3M of profit: at 2x the biggest bet is 3M, at 1000x it is about 3,003.
+        assert_eq!(c.max_bet(200).0, 3_000_000 * COIN);
+        assert_eq!(c.max_bet(100_000).0, 3_000_000 * COIN * 100 / (100_000 - 100));
+    }
+
 }
