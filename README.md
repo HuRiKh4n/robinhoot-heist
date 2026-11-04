@@ -1,6 +1,6 @@
 # The Heist 🦊🏹
 
-**A crash game on NEAR where every failed heist burns the memecoin.**
+**A tap-to-run crash game on NEAR, played with the RobinHoot memecoin.**
 Built for NEAR HACKATHON 2026 (tracks: *Games With Real Economies*, *Memecoins With Mechanics*).
 
 ▶ **Play:** https://hurikh4n.github.io/robinhoot-heist/ (practice mode needs nothing; on-chain mode uses NEAR testnet and free tGOLD)
@@ -14,27 +14,28 @@ The Heist is the guild's game: you sneak into the Sheriff's vault, the loot mult
 2. **Tap RUN** (`cash_out`). The contract measures the flight time with the chain's own clock and never lets you claim more than the arrow reached. Only now does NEAR roll the Sheriff's dice: the *crash point* where he snaps the arrow.
 3. **Escape or get caught**, settled in the same transaction:
    - crash ≥ your multiplier → you are paid **bet × multiplier** at once;
-   - crash < your multiplier → **half of the bet is burned for good**, half stays in the vault that pays the next winners.
+   - crash < your multiplier → the bet stays in the vault that pays the next winners.
    - no RUN within 20 s → the Sheriff wins (settled by anyone with `settle_expired`, or automatically when you play again).
 
 Rolling the dice at the moment you run is what makes a tap-to-stop crash game honest on a blockchain: contract state is public, so a crash point fixed in advance could be read by anyone. Rolled at cash-out, it is unknown to everyone until then, and the odds are exactly those of choosing the same multiplier in advance. You can also pick a multiplier before you go (`{"heist":{"escape":250}}`, or the page's *run automatically* box).
 
-## The mechanic (why it is good for the coin)
+## The mechanic
 
 | | |
 |---|---|
 | Win chance at escape *x* | **(1 − 3%) ÷ x** → 48.5% at 2×, 9.7% at 10×, 0.97% at 100× |
 | House edge | 3%, fixed at deploy time, so the vault cannot run dry over time |
-| Biggest possible win | 1% of the vault per heist, so one lucky roll cannot drain it |
-| Every lost heist | 50% **burned** to an address nobody controls · 50% back to the vault |
-| Admin keys | **none**: the deploy script deletes the only full-access keys after setup |
+| Biggest possible win | 10% of the vault per heist (set at deploy, 0.1–10%), so one lucky roll cannot drain it |
+| Every lost heist | the whole bet goes back to the vault |
+| Who funds the vault | the guild's marketing wallet (the owner): it can add coins or take them out, and each move is a public `EVENT_JSON` |
+| Admin keys | the contract account has **no keys** after setup; the owner can only pause, set limits and move vault coins, never touch a running heist |
 
-Playing makes the coin scarcer: the burn is proportional to the volume the game sees, and the burned balance is public.
+Every bet, payout and vault move is an on-chain event, so the vault's history is public.
 
 ## What is in this repo
 
 ```
-contracts/heist       The Heist (Rust, near-sdk 5): ft_on_transfer game, crash roll, payouts, burn, vault, views, events
+contracts/heist       The Heist (Rust, near-sdk 5): ft_on_transfer game, crash roll, payouts, vault, views, events
 contracts/test-gold   tGOLD, a NEP-141 test coin with a public faucet, so anyone can play on testnet
 scripts/              deploy-testnet.mjs: fresh accounts, deploy, fund the vault, one smoke-test heist, delete keys
 web/                  the game page (plain HTML/CSS/JS, no build step): practice mode, wallet, live heists from the chain
@@ -56,7 +57,7 @@ Play by sending the coin to the contract with `ft_transfer_call`:
 
 Calls: `cash_out({escape})`, `settle_expired({player})`, `retry_owed({account})`.
 Views: `get_round({account})`, `multiplier({ms})`, `get_config`, `get_stats`, `get_recent({limit})`, `get_player({account})`, `max_bet({escape})`, `win_chance_bps({escape})`, `get_owed({account})`.
-Each heist emits an `EVENT_JSON` log (`standard: "heist"`) with the bet, escape, crash, result, payout and burn.
+Each heist emits an `EVENT_JSON` log (`standard: "heist"`) with the bet, escape, crash, result and payout.
 A bet that cannot be played (vault paused, escape out of range, below the minimum, or a possible win above the cap) is refunded whole by the token in the same transaction.
 
 ### The crash formula

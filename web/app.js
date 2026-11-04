@@ -57,7 +57,7 @@ function updateOdds() {
   const valid = escapeX100 >= 101 && escapeX100 <= 100000;
   $('chance').textContent = valid ? ((1 - EDGE) / (escapeX100 / 100) * 100).toFixed(2) + '%' : '–';
   $('win').textContent = valid ? fmt(bet * escapeX100 / 100) : '–';
-  $('burn').textContent = fmt(bet / 2);
+  $('burn').textContent = fmt(bet);
   for (const b of document.querySelectorAll('#quick button')) b.classList.toggle('on', Number(b.dataset.x) === escape);
   void refreshMaxBet();
 }
@@ -368,7 +368,7 @@ $('go').addEventListener('click', async () => {
     if (won) state.practice += bet * ran / 100;
     state.practice = Math.round(state.practice * 100) / 100;
     localStorageSet('heist:practice', String(state.practice));
-    renderBalance(); note(won ? `You escaped: +${fmt(bet * ran / 100 - bet)} coins.` : `Caught. ${fmt(bet / 2)} burned, ${fmt(bet / 2)} to the vault.`);
+    renderBalance(); note(won ? `You escaped: +${fmt(bet * ran / 100 - bet)} coins.` : `Caught. ${fmt(bet)} to the Sheriff's vault.`);
     state.running = false; lock(false); $('go').textContent = 'ROB THE VAULT';
     return;
   }
@@ -396,7 +396,7 @@ $('go').addEventListener('click', async () => {
     const heist = expired ? null : await findMyHeist(before.heists);
     if (heist) {
       reveal({ escape: heist.escape / 100, crash: heist.crash / 100, won: heist.won });
-      note(heist.won ? `You escaped with ${fromUnits(heist.payout.toString())} tGOLD.` : `Caught. ${fromUnits(heist.burned.toString())} tGOLD burned forever.`);
+      note(heist.won ? `You escaped with ${fromUnits(heist.payout.toString())} tGOLD.` : `Caught. ${fromUnits(heist.bet.toString())} tGOLD to the Sheriff's vault.`);
     } else if (expired) {
       reveal({ escape: 0, crash: 1, won: false });
       note('Too slow: the Sheriff wins this one (it is settled when you play again).');
@@ -427,12 +427,12 @@ async function refreshBoard() {
     $('s-vault').textContent = fromUnits(config.vault, 0) + ' tGOLD';
     $('s-heists').textContent = fmt(stats.heists);
     $('s-escapes').textContent = stats.heists ? `${fmt(stats.escapes)} (${Math.round(stats.escapes / stats.heists * 100)}%)` : '0';
-    $('s-burned').textContent = fromUnits(stats.burned, 0) + ' tGOLD';
+    $('s-burned').textContent = fromUnits(stats.paid, 0) + ' tGOLD';
     $('recent').innerHTML = recent.length ? recent.map(h => `<li class="${h.player === state.account ? 'mine' : ''}">
       <span class="who" title="${h.player}">#${h.id} · ${short(h.player)}</span>
       <span class="bet">${fromUnits(h.bet)} ${h.escape ? 'ran at ' + (h.escape / 100).toFixed(2) + '×' : 'never ran'}</span>
       <span>snapped ${(h.crash / 100).toFixed(2)}×</span>
-      <span class="${h.won ? 'won' : 'lost'}">${h.won ? '+' + fromUnits(h.payout) : '🔥 ' + fromUnits(h.burned)}</span></li>`).join('') : '<li class="muted">No heists yet. Be the first.</li>';
+      <span class="${h.won ? 'won' : 'lost'}">${h.won ? '+' + fromUnits(h.payout) : '−' + fromUnits(h.bet)}</span></li>`).join('') : '<li class="muted">No heists yet. Be the first.</li>';
   } catch { $('recent').innerHTML = '<li class="muted">Could not reach NEAR testnet right now.</li>'; }
 }
 
