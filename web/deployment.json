@@ -1,8 +1,8 @@
 {
   "network": "testnet",
-  "heist": "robinhoot-heist-mvxns2hb.testnet",
-  "token": "tgold.robinhoot-heist-mvxns2hb.testnet",
+  "heist": "robinhoot-heist-mw2gwjv1.testnet",
+  "token": "tgold.robinhoot-heist-mw2gwjv1.testnet",
   "burn": "0000000000000000000000000000000000000000000000000000000000000000",
   "rpc": "https://test.rpc.fastnear.com",
-  "deployedAt": "2026-11-01T10:00:32.021Z"
+  "deployedAt": "2026-11-04T18:46:56.970Z"
 }
