@@ -1,7 +1,8 @@
 # The Heist 🦊🏹
 
 **A tap-to-run crash game on NEAR, played with the RobinHoot memecoin.**
-Built for NEAR HACKATHON 2026 (tracks: *Games With Real Economies*, *Memecoins With Mechanics*).
+Built for NEAR HACKATHON 2026, track **Games With Real Economies**.
+Sister project, also submitted (track *Memecoins With Mechanics*): **[RobinHoot × the Guild Chest](https://github.com/HuRiKh4n/robinhoot-outlaw-guild)**, an ownerless contract that turns the coin's trading tax into weekly prizes for holders.
 
 ▶ **Play:** https://hurikh4n.github.io/robinhoot-heist/ (practice mode needs nothing; on-chain mode uses NEAR testnet and free tGOLD)
 
